@@ -1,0 +1,963 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Simulasi E-Voting - Pilkades Karangsari Kec. Binong Kab. Subang 2026</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- jsQR untuk pemindaian QR Code real-time -->
+    <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+    <!-- QRCode.js untuk kode verifikasi pada struk thermal 58mm -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <!-- Google Fonts: Inter & Roboto Mono untuk struk thermal -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Roboto+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #F8FAFC;
+            color: #111827;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        /* Kartu kandidat meniru gaya visual video referensi */
+        .candidate-card {
+            background: #FFFFFF;
+            border: 3px solid #E5E7EB;
+            border-radius: 16px;
+            transition: all 0.22s cubic-bezier(0.25, 0.8, 0.25, 1);
+            box-shadow: 0 4px 16px rgba(15, 23, 42, 0.06);
+        }
+
+        .candidate-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 24px rgba(15, 23, 42, 0.1);
+        }
+
+        .candidate-card.selected {
+            border-color: #EF4444;
+            box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.22), 0 12px 28px rgba(239, 68, 68, 0.18);
+            transform: translateY(-3px);
+        }
+
+        /* Animasi garis laser pemindai */
+        @keyframes scanLine {
+            0%, 100% { top: 12%; opacity: 0.4; }
+            50% { top: 88%; opacity: 1; }
+        }
+        .animate-scan-line {
+            animation: scanLine 2.4s ease-in-out infinite;
+        }
+
+        /* Animasi pop-up masuk */
+        @keyframes modalPop {
+            0% { opacity: 0; transform: scale(0.92); }
+            100% { opacity: 1; transform: scale(1); }
+        }
+        .animate-modal-pop {
+            animation: modalPop 0.2s ease-out forwards;
+        }
+
+        /* Gaya Kertas Struk Thermal 58mm */
+        .thermal-receipt-58mm {
+            width: 58mm;
+            max-width: 100%;
+            background: #FFFFFF;
+            color: #000000;
+            font-family: 'Roboto Mono', monospace;
+            padding: 4mm 3.5mm;
+            box-shadow: 0 14px 32px rgba(0, 0, 0, 0.35);
+            position: relative;
+        }
+
+        /* Efek gerigi kertas struk di atas & bawah pada pratinjau layar */
+        .thermal-receipt-58mm::before,
+        .thermal-receipt-58mm::after {
+            content: "";
+            position: absolute;
+            left: 0;
+            right: 0;
+            height: 5px;
+            background-size: 10px 5px;
+        }
+        .thermal-receipt-58mm::before {
+            top: -5px;
+            background-image: linear-gradient(135deg, transparent 50%, #ffffff 50%),
+                              linear-gradient(225deg, transparent 50%, #ffffff 50%);
+        }
+        .thermal-receipt-58mm::after {
+            bottom: -5px;
+            background-image: linear-gradient(45deg, transparent 50%, #ffffff 50%),
+                              linear-gradient(315deg, transparent 50%, #ffffff 50%);
+        }
+
+        /* Pengaturan Cetak Khusus Printer Thermal 58mm */
+        @media print {
+            @page {
+                size: 58mm auto;
+                margin: 0;
+            }
+            html, body {
+                width: 58mm;
+                margin: 0 !important;
+                padding: 0 !important;
+                background: #FFFFFF !important;
+            }
+            body * {
+                visibility: hidden;
+            }
+            #printable-receipt-area,
+            #printable-receipt-area * {
+                visibility: visible;
+            }
+            #printable-receipt-area {
+                position: fixed;
+                left: 0;
+                top: 0;
+                width: 58mm !important;
+                margin: 0 !important;
+                padding: 3mm 2.5mm !important;
+                box-shadow: none !important;
+            }
+            #printable-receipt-area::before,
+            #printable-receipt-area::after {
+                display: none !important;
+            }
+        }
+    </style>
+</head>
+<body class="min-h-screen select-none overflow-x-hidden">
+
+    <!-- =====================================================================
+         TAHAP 1: LAYAR PEMINDAI BARCODE / QR CODE (LAYAR PERTAMA)
+         ===================================================================== -->
+    <section id="screen-scanner" class="fixed inset-0 z-20 bg-neutral-900 flex flex-col justify-between overflow-hidden">
+        <!-- Feed Kamera Langsung Layar Penuh -->
+        <video id="scanner-video" class="absolute inset-0 w-full h-full object-cover" autoplay playsinline muted></video>
+        <canvas id="scanner-canvas" class="hidden"></canvas>
+
+        <!-- Latar Fallback Gradien Halus Jika Kamera Belum Aktif / Tidak Tersedia -->
+        <div id="camera-fallback-bg" class="absolute inset-0 bg-gradient-to-b from-stone-700 via-stone-800 to-stone-900 flex items-center justify-center pointer-events-none">
+            <div class="text-center px-6 opacity-40">
+                <p id="camera-status-hint" class="text-white text-xs sm:text-sm font-medium">Menyiapkan kamera perangkat...</p>
+            </div>
+        </div>
+
+        <!-- PANEL ATAS: Kartu Putih Mengambang Sesuai Referensi -->
+        <div class="relative z-10 pt-3 sm:pt-5 px-3 sm:px-6">
+            <div class="max-w-3xl mx-auto bg-white/95 backdrop-blur-md rounded-2xl shadow-lg px-4 py-3.5 sm:py-4 text-center border border-white">
+                <h1 class="text-base sm:text-xl font-extrabold text-gray-900 tracking-tight">
+                    Arahkan kamera ke QR code / Barcode
+                </h1>
+                <p class="text-xs sm:text-sm text-gray-500 mt-0.5">
+                    Pastikan kode terlihat jelas dan dalam frame
+                </p>
+            </div>
+        </div>
+
+        <!-- AREA TENGAH: Viewfinder 4 Sudut Hijau (#00FF00) & Kotak Gelap -->
+        <div class="relative z-10 flex-1 flex items-center justify-center px-4">
+            <div class="relative w-56 h-56 sm:w-64 sm:h-64 flex items-center justify-center">
+                <!-- Sudut Kiri Atas -->
+                <div class="absolute top-0 left-0 w-11 h-11 border-t-[5px] border-l-[5px] border-[#00FF00] rounded-tl-md"></div>
+                <!-- Sudut Kanan Atas -->
+                <div class="absolute top-0 right-0 w-11 h-11 border-t-[5px] border-r-[5px] border-[#00FF00] rounded-tr-md"></div>
+                <!-- Sudut Kiri Bawah -->
+                <div class="absolute bottom-0 left-0 w-11 h-11 border-b-[5px] border-l-[5px] border-[#00FF00] rounded-bl-md"></div>
+                <!-- Sudut Kanan Bawah -->
+                <div class="absolute bottom-0 right-0 w-11 h-11 border-b-[5px] border-r-[5px] border-[#00FF00] rounded-br-md"></div>
+
+                <!-- Garis Laser Pemindai -->
+                <div class="absolute left-3 right-3 h-0.5 bg-[#00FF00] shadow-[0_0_8px_#00FF00] animate-scan-line"></div>
+
+                <!-- Kotak Gelap Instruksi Tengah -->
+                <div class="bg-black/70 backdrop-blur-xs text-white text-center px-5 py-3 rounded-xl shadow-md mx-5">
+                    <p class="text-xs sm:text-sm font-medium leading-relaxed">
+                        Letakkan QR code / Barcode<br>di dalam frame
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <!-- PANEL BAWAH: Bilah Status "Siap untuk scan" + Tombol Simulasi & Kontrol Kamera -->
+        <div class="relative z-10 pb-4 sm:pb-6 px-3 sm:px-6">
+            <div class="max-w-3xl mx-auto flex flex-col gap-2.5">
+                <!-- Tombol Aksi Cepat (Simulasi Scan & Kontrol Kamera) -->
+                <div class="flex items-center justify-center gap-2">
+                    <button
+                        id="btn-simulate-scan"
+                        type="button"
+                        class="bg-[#2563EB] hover:bg-[#1D4ED8] active:scale-[0.98] text-white font-bold text-xs sm:text-sm px-4 py-2.5 rounded-xl shadow-lg flex items-center gap-2 transition-all cursor-pointer">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2" d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z"></path>
+                        </svg>
+                        <span>Simulasi Scan</span>
+                    </button>
+
+                    <button
+                        id="btn-switch-camera"
+                        type="button"
+                        title="Ganti Kamera Depan/Belakang"
+                        class="bg-black/60 hover:bg-black/80 text-white p-2.5 rounded-xl backdrop-blur-xs border border-white/20 transition-all cursor-pointer">
+                        <svg class="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                        </svg>
+                    </button>
+
+                    <button
+                        id="btn-toggle-torch"
+                        type="button"
+                        title="Lampu Senter"
+                        class="hidden bg-black/60 hover:bg-black/80 text-white p-2.5 rounded-xl backdrop-blur-xs border border-white/20 transition-all cursor-pointer">
+                        <svg class="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
+                        </svg>
+                    </button>
+                </div>
+
+                <!-- Bilah Putih Status Bawah Sesuai Referensi -->
+                <div class="w-full bg-white/95 backdrop-blur-md rounded-2xl shadow-lg py-3 px-4 text-center border border-white">
+                    <p id="scanner-bottom-status" class="text-xs sm:text-sm font-medium text-gray-600">
+                        Siap untuk scan
+                    </p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- =====================================================================
+         TAHAP 2: LAYAR SURAT SUARA (BALLOT SCREEN) - PERSIS VIDEO REFERENSI
+         (Tanpa tombol "Saya Tidak Akan Memilih")
+         ===================================================================== -->
+    <section id="screen-ballot" class="hidden min-h-screen flex-col justify-between bg-[#F8FAFC]">
+        <!-- HEADER SURAT SUARA -->
+        <header class="w-full pt-4 sm:pt-6 px-4 sm:px-8">
+            <div class="max-w-6xl mx-auto relative flex flex-col items-center">
+                <!-- ===========================================================
+                     LOGO KABUPATEN SUBANG
+                     Letakkan file "logo-subang.png" di folder yang sama dengan index.html.
+                     Jika file belum tersedia, ilustrasi cadangan SVG otomatis tampil.
+                     =========================================================== -->
+                <div class="mb-2">
+                    <img
+                        id="header-logo-img"
+                        src="logo-subang.png"
+                        alt="Logo Kabupaten Subang"
+                        class="w-14 h-14 sm:w-16 sm:h-16 mx-auto object-contain drop-shadow-xs"
+                        onerror="this.style.display='none'; this.nextElementSibling.classList.remove('hidden');"
+                    />
+                    <svg viewBox="0 0 120 130" class="hidden w-14 h-14 sm:w-16 sm:h-16 mx-auto drop-shadow-xs" aria-label="Logo Kabupaten Subang">
+                        <!-- Perisai Utama -->
+                        <path d="M18 14 L102 14 L102 68 C102 95 60 115 60 115 C60 115 18 95 18 68 Z" fill="#15803D" stroke="#FACC15" stroke-width="4.5" />
+                        <!-- Langit Biru -->
+                        <path d="M21 17 L99 17 L99 54 L21 54 Z" fill="#0284C7" />
+                        <!-- Bintang Emas -->
+                        <polygon points="60,21 63,29 72,29 65,34 67,42 60,37 53,42 55,34 48,29 57,29" fill="#FACC15" />
+                        <!-- Gunung -->
+                        <path d="M21 54 L42 38 L54 44 L66 37 L99 54 Z" fill="#1E3A8A" />
+                        <!-- Hamparan Hijau -->
+                        <path d="M21 54 L99 54 L99 68 C99 91 60 110 60 110 C60 110 21 91 21 68 Z" fill="#16A34A" />
+                        <!-- Buah Nanas Khas Subang -->
+                        <ellipse cx="60" cy="76" rx="11" ry="15" fill="#F59E0B" stroke="#78350F" stroke-width="1.5" />
+                        <path d="M53 69 L67 83 M67 69 L53 83 M51 76 L69 76" stroke="#78350F" stroke-width="1.2" />
+                        <path d="M60 61 L53 51 L58 55 L60 48 L62 55 L67 51 Z" fill="#14532D" />
+                        <!-- Padi & Kapas -->
+                        <path d="M35 88 C28 76 28 60 36 48" stroke="#FACC15" stroke-width="3" fill="none" stroke-linecap="round" />
+                        <path d="M85 88 C92 76 92 60 84 48" stroke="#FFFFFF" stroke-width="3" fill="none" stroke-linecap="round" />
+                        <!-- Pita Semboyan -->
+                        <path d="M12 104 Q60 122 108 104 L104 117 Q60 132 16 117 Z" fill="#FEF08A" stroke="#CA8A04" stroke-width="1.8" />
+                        <text x="60" y="116" text-anchor="middle" font-size="6.8" font-weight="800" fill="#1E293B" letter-spacing="0.3">KARYA UTAMA SATYA NEGARA</text>
+                    </svg>
+                </div>
+
+                <!-- Teks Header Surat Suara -->
+                <div class="text-center leading-tight">
+                    <h2 class="text-xl sm:text-2xl md:text-[26px] font-extrabold text-gray-900 tracking-wide uppercase">
+                        SURAT SUARA
+                    </h2>
+                    <p class="text-xs sm:text-sm md:text-base font-bold text-gray-800 uppercase mt-0.5 tracking-wide">
+                        PEMILIHAN KEPALA DESA KARANGSARI
+                    </p>
+                    <p class="text-xs sm:text-sm md:text-base font-bold text-gray-800 uppercase tracking-wide">
+                        KECAMATAN BINONG KABUPATEN SUBANG
+                    </p>
+                    <p class="text-xs sm:text-sm md:text-base font-bold text-gray-800 uppercase tracking-wide">
+                        TAHUN 2026
+                    </p>
+                </div>
+            </div>
+        </header>
+
+        <!-- BAGIAN TENGAH: 2 KARTU KANDIDAT SEJAJAR -->
+        <main class="flex-1 flex items-center justify-center px-4 sm:px-8 py-4 sm:py-6">
+            <div id="candidates-container" class="w-full max-w-3xl grid grid-cols-2 gap-4 sm:gap-8">
+                <!-- Kartu kandidat dirender via JavaScript -->
+            </div>
+        </main>
+
+        <!-- BAGIAN BAWAH: TOMBOL UTAMA "PILIH KANDIDAT INI" -->
+        <footer class="w-full pb-5 sm:pb-7 px-4 sm:px-8">
+            <div class="max-w-5xl mx-auto">
+                <button
+                    id="btn-vote-main"
+                    type="button"
+                    disabled
+                    class="w-full py-3.5 sm:py-4 rounded-xl font-bold text-sm sm:text-base tracking-wider uppercase transition-all shadow-md bg-blue-300 text-white/90 cursor-not-allowed">
+                    PILIH KANDIDAT INI
+                </button>
+            </div>
+        </footer>
+    </section>
+
+    <!-- =====================================================================
+         TAHAP 3A: MODAL KONFIRMASI PEMILIHAN (MIRIP VIDEO DETIK 00:03-00:04)
+         ===================================================================== -->
+    <div id="modal-confirm" class="fixed inset-0 z-30 hidden items-center justify-center bg-black/70 backdrop-blur-[2px] p-4">
+        <div class="bg-white w-full max-w-md rounded-2xl shadow-2xl p-6 sm:p-7 text-center animate-modal-pop not-italic">
+            <h3 class="text-lg sm:text-xl font-extrabold text-gray-900 not-italic">
+                Konfirmasi Pemilihan
+            </h3>
+            <p class="text-xs sm:text-sm font-semibold not-italic text-red-600 mt-1">
+                Apakah Anda yakin akan memilih kandidat ini?
+            </p>
+
+            <!-- Pratinjau Foto & Nama Kandidat Terpilih -->
+            <div class="my-5 flex flex-col items-center">
+                <div class="relative w-32 h-36 sm:w-36 sm:h-40 rounded-xl overflow-hidden border-2 border-gray-200 shadow-sm bg-[#DC2626]">
+                    <span id="confirm-badge-num" class="absolute top-1.5 left-1.5 z-10 bg-white/95 text-gray-900 text-xs font-extrabold px-2 py-0.5 rounded-md shadow-xs">01</span>
+                    <div id="confirm-photo-box" class="w-full h-full"></div>
+                </div>
+                <p id="confirm-candidate-name" class="mt-3 text-base sm:text-lg font-bold text-gray-900">
+                    Elan Suherlan
+                </p>
+            </div>
+
+            <!-- Tombol Ulangi (Merah) & Pilih (Biru) -->
+            <div class="grid grid-cols-2 gap-3 sm:gap-4 mt-2">
+                <button
+                    id="btn-confirm-repeat"
+                    type="button"
+                    class="py-3 px-4 rounded-xl bg-[#EF4444] hover:bg-[#DC2626] active:scale-[0.98] text-white font-bold text-sm sm:text-base shadow-sm transition-all cursor-pointer">
+                    Ulangi
+                </button>
+                <button
+                    id="btn-confirm-yes"
+                    type="button"
+                    class="py-3 px-4 rounded-xl bg-[#2563EB] hover:bg-[#1D4ED8] active:scale-[0.98] text-white font-bold text-sm sm:text-base shadow-sm transition-all cursor-pointer">
+                    Pilih
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- =====================================================================
+         TAHAP 3B: MODAL PROSES ("Mohon tunggu..." -> "Menyimpan suara...")
+         ===================================================================== -->
+    <div id="modal-processing" class="fixed inset-0 z-40 hidden items-center justify-center bg-black/70 backdrop-blur-[2px] p-4">
+        <div class="bg-white w-full max-w-xs rounded-2xl shadow-2xl px-6 py-7 text-center animate-modal-pop">
+            <div class="w-9 h-9 border-4 border-blue-100 border-t-[#2563EB] rounded-full animate-spin mx-auto mb-3.5"></div>
+            <p id="processing-text" class="text-base sm:text-lg font-semibold text-gray-800">
+                Mohon tunggu...
+            </p>
+        </div>
+    </div>
+
+    <!-- =====================================================================
+         TAHAP 3C: MODAL TERIMA KASIH ("Suara berhasil disimpan.")
+         ===================================================================== -->
+    <div id="modal-thanks" class="fixed inset-0 z-40 hidden items-center justify-center bg-black/70 backdrop-blur-[2px] p-4">
+        <div class="bg-white w-full max-w-xs sm:max-w-sm rounded-2xl shadow-2xl px-6 py-7 text-center animate-modal-pop">
+            <div class="w-16 h-16 rounded-full bg-[#10B981]/15 text-[#10B981] flex items-center justify-center mx-auto mb-3.5">
+                <svg class="w-9 h-9" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"></path>
+                </svg>
+            </div>
+            <h3 class="text-lg sm:text-xl font-extrabold text-gray-900">Terima Kasih</h3>
+            <p class="text-xs sm:text-sm text-gray-600 mt-1">Suara berhasil disimpan.</p>
+        </div>
+    </div>
+
+    <!-- =====================================================================
+         TAHAP 4: POP-UP CETAK TANDA BUKTI THERMAL 58MM SIAP CETAK
+         ===================================================================== -->
+    <div id="modal-receipt" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/75 backdrop-blur-xs p-4 overflow-y-auto">
+        <div class="w-full max-w-sm flex flex-col items-center my-auto animate-modal-pop">
+            <div class="mb-3 text-center">
+                <span class="inline-block bg-emerald-500/20 border border-emerald-400/40 text-emerald-200 text-xs font-semibold px-3 py-1 rounded-full">
+                    Tanda Bukti Thermal (Ukuran 58mm)
+                </span>
+            </div>
+
+            <!-- AREA KERTAS STRUK 58MM YANG AKAN DICETAK -->
+            <div id="printable-receipt-area" class="thermal-receipt-58mm text-black">
+                <!-- Header Struk -->
+                <div class="text-center border-b border-dashed border-black pb-2 mb-2">
+                    <!-- Logo Kabupaten Subang untuk Struk Thermal 58mm (otomatis hitam-putih saat dicetak) -->
+                    <img
+                        id="receipt-logo-img"
+                        src="logo-subang.png"
+                        alt="Logo Kabupaten Subang"
+                        class="w-10 h-10 mx-auto mb-1 object-contain grayscale contrast-150"
+                        onerror="this.style.display='none'; this.nextElementSibling.classList.remove('hidden');"
+                    />
+                    <svg viewBox="0 0 120 125" class="hidden w-10 h-10 mx-auto mb-1" aria-hidden="true">
+                        <path d="M18 12 L102 12 L102 66 C102 94 60 114 60 114 C60 114 18 94 18 66 Z" fill="none" stroke="#000000" stroke-width="6" />
+                        <polygon points="60,20 63,28 72,28 65,33 67,41 60,36 53,41 55,33 48,28 57,28" fill="#000000" />
+                        <path d="M22 52 L44 36 L56 42 L68 35 L98 52" fill="none" stroke="#000000" stroke-width="4" />
+                        <ellipse cx="60" cy="74" rx="10" ry="14" fill="none" stroke="#000000" stroke-width="4" />
+                        <path d="M54 68 L66 80 M66 68 L54 80" stroke="#000000" stroke-width="2.5" />
+                        <text x="60" y="102" text-anchor="middle" font-size="8" font-weight="900" fill="#000000">SUBANG</text>
+                    </svg>
+                    <p class="text-[9px] font-bold leading-tight uppercase">PANITIA PEMILIHAN KEPALA DESA</p>
+                    <p class="text-[10px] font-bold leading-tight uppercase">DESA KARANGSARI</p>
+                    <p class="text-[8.5px] leading-tight uppercase">KEC. BINONG - KAB. SUBANG</p>
+                    <p class="text-[8.5px] font-bold leading-tight uppercase">TAHUN 2026</p>
+                </div>
+
+                <!-- Judul Tanda Bukti -->
+                <div class="text-center my-2">
+                    <p class="text-[9.5px] font-bold uppercase tracking-wide border border-black py-1 px-1">
+                        TANDA BUKTI SIMULASI PEMILIHAN
+                    </p>
+                </div>
+
+                <!-- Detail Antrian & Waktu (Tanpa Data Pribadi & Tanpa Pilihan Kandidat) -->
+                <div class="text-[8.5px] leading-relaxed space-y-1 border-b border-dashed border-black pb-2 mb-2">
+                    <div class="flex justify-between">
+                        <span>No. Antrian :</span>
+                        <span id="receipt-queue-num" class="font-bold">#001</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span>Waktu       :</span>
+                        <span id="receipt-datetime" class="font-bold text-right">21/11/2026 16:34 WIB</span>
+                    </div>
+                    <div class="pt-0.5">
+                        <span>Status      :</span>
+                        <p class="font-bold uppercase">SAH / TELAH MEMILIH</p>
+                    </div>
+                </div>
+
+                <!-- QR Code Verifikasi Simulasi Sementara -->
+                <div class="flex flex-col items-center justify-center my-2">
+                    <div id="receipt-qrcode" class="p-1 bg-white"></div>
+                    <p id="receipt-qr-label" class="text-[7.5px] mt-1 tracking-wider">SIM-KARANGSARI-001</p>
+                </div>
+
+                <!-- Footer Struk -->
+                <div class="text-center border-t border-dashed border-black pt-2 text-[8px] leading-snug">
+                    <p class="font-bold">PILIHAN BERSIFAT RAHASIA</p>
+                    <p class="mt-1">Terima kasih telah berpartisipasi dalam Simulasi Pilkades Karangsari 2026.</p>
+                </div>
+            </div>
+
+            <!-- TOMBOL CETAK & KEMBALI KE SCAN -->
+            <div class="w-full max-w-xs mt-5 flex flex-col gap-2.5">
+                <button
+                    id="btn-print-receipt"
+                    type="button"
+                    class="w-full py-3 px-4 rounded-xl bg-[#2563EB] hover:bg-[#1D4ED8] active:scale-[0.98] text-white font-bold text-sm shadow-lg flex items-center justify-center gap-2 transition-all cursor-pointer">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"></path>
+                    </svg>
+                    <span>Cetak Bukti (58mm)</span>
+                </button>
+
+                <button
+                    id="btn-finish-and-scan"
+                    type="button"
+                    class="w-full py-3 px-4 rounded-xl bg-white hover:bg-gray-100 active:scale-[0.98] text-gray-900 font-bold text-sm shadow transition-all cursor-pointer">
+                    Selesai & Kembali ke Scan
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        /**
+         * =====================================================================
+         * KONFIGURASI GAMBAR & DATA KANDIDAT (SILAKAN GANTI NAMA FILE DI SINI)
+         * =====================================================================
+         * Letakkan file gambar berikut di folder yang sama dengan index.html:
+         * 1. logo-subang.png  -> logo_kabupaten_subang
+         * 2. kandidat-01.jpg  -> calon_1 (Elan Suherlan)
+         * 3. kandidat-02.jpg  -> calon_1 (Dasim Sumantri, SE)
+         *
+         * Jika file belum diunggah, aplikasi otomatis menampilkan ilustrasi
+         * cadangan (fallback) agar tampilan tidak pernah rusak.
+         */
+        const ASSET_CONFIG = {
+            logoSubang: 'logo-subang.png',
+            candidates: [
+                {
+                    id: 1,
+                    number: '01',
+                    name: 'Elan Suherlan',
+                    photoSrc: 'kandidat-01.jpg',
+                    fallbackType: 'suit'
+                },
+                {
+                    id: 2,
+                    number: '02',
+                    name: 'Dasim Sumantri, SE',
+                    photoSrc: 'kandidat-02.jpg',
+                    fallbackType: 'koko'
+                }
+            ]
+        };
+
+        /**
+         * SIMULASI E-VOTING PILKADES DESA KARANGSARI, KEC. BINONG, KAB. SUBANG 2026
+         * Alur:
+         * 1. Pindai QR Code / Barcode (atau tombol Simulasi Scan) -> tanpa penyimpanan data pemilih
+         * 2. Surat Suara 2 Kandidat:
+         *    - 01: Elan Suherlan (kandidat-01.jpg)
+         *    - 02: Dasim Sumantri, SE (kandidat-02.jpg)
+         *    - Tanpa tombol "Saya Tidak Akan Memilih"
+         * 3. Konfirmasi Pemilihan -> Mohon tunggu... -> Menyimpan suara... -> Terima Kasih (Suara berhasil disimpan.)
+         * 4. Pop-up Cetak Tanda Bukti ukuran thermal 58mm siap cetak -> Kembali ke layar Scan
+         */
+        document.addEventListener('DOMContentLoaded', () => {
+            // Penghitung sesi sementara di memori (tidak disimpan ke localStorage/database)
+            let sessionTotalVotes = 0;
+            let selectedCandidateId = null;
+
+            // Terapkan sumber logo dari ASSET_CONFIG
+            const headerLogoImg = document.getElementById('header-logo-img');
+            const receiptLogoImg = document.getElementById('receipt-logo-img');
+            if (headerLogoImg) headerLogoImg.src = ASSET_CONFIG.logoSubang;
+            if (receiptLogoImg) receiptLogoImg.src = ASSET_CONFIG.logoSubang;
+
+            // Data 2 Kandidat dari blok konfigurasi di atas
+            const candidates = ASSET_CONFIG.candidates;
+
+            // Referensi elemen layar
+            const screenScanner = document.getElementById('screen-scanner');
+            const screenBallot = document.getElementById('screen-ballot');
+            const scannerBottomStatus = document.getElementById('scanner-bottom-status');
+
+            // Referensi elemen kamera & pemindai
+            const videoEl = document.getElementById('scanner-video');
+            const canvasEl = document.getElementById('scanner-canvas');
+            const canvasCtx = canvasEl.getContext('2d', { willReadFrequently: true });
+            const cameraFallbackBg = document.getElementById('camera-fallback-bg');
+            const cameraStatusHint = document.getElementById('camera-status-hint');
+            const btnSwitchCamera = document.getElementById('btn-switch-camera');
+            const btnToggleTorch = document.getElementById('btn-toggle-torch');
+
+            let mediaStream = null;
+            let scanningActive = false;
+            let scanAnimationId = null;
+            let useFrontCamera = false;
+            let torchEnabled = false;
+            let barcodeDetector = null;
+
+            // Inisialisasi BarcodeDetector bawaan browser jika tersedia (mendukung QR & Barcode 1D)
+            if ('BarcodeDetector' in window) {
+                try {
+                    barcodeDetector = new BarcodeDetector({
+                        formats: ['qr_code', 'code_128', 'code_39', 'ean_13', 'ean_8', 'upc_a', 'itf']
+                    });
+                } catch (e) {
+                    barcodeDetector = null;
+                }
+            }
+
+            // =================================================================
+            // 1. LOGIKA KAMERA & PEMINDAIAN QR CODE / BARCODE
+            // =================================================================
+            async function startCamera() {
+                stopCamera();
+                scannerBottomStatus.textContent = 'Siap untuk scan';
+                cameraStatusHint.textContent = 'Menyiapkan kamera perangkat...';
+
+                if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                    cameraStatusHint.textContent = 'Kamera tidak tersedia. Gunakan tombol "Simulasi Scan" di bawah.';
+                    return;
+                }
+
+                try {
+                    const constraints = {
+                        video: {
+                            facingMode: useFrontCamera ? 'user' : { ideal: 'environment' },
+                            width: { ideal: 1280 },
+                            height: { ideal: 720 }
+                        },
+                        audio: false
+                    };
+
+                    mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
+                    videoEl.srcObject = mediaStream;
+                    await videoEl.play();
+
+                    cameraFallbackBg.classList.add('hidden');
+                    scanningActive = true;
+
+                    // Cek dukungan senter (torch)
+                    const track = mediaStream.getVideoTracks()[0];
+                    const capabilities = track.getCapabilities ? track.getCapabilities() : {};
+                    if (capabilities.torch) {
+                        btnToggleTorch.classList.remove('hidden');
+                    } else {
+                        btnToggleTorch.classList.add('hidden');
+                    }
+
+                    scanLoop();
+                } catch (err) {
+                    cameraFallbackBg.classList.remove('hidden');
+                    cameraStatusHint.textContent = 'Izin kamera tidak aktif. Tekan "Simulasi Scan" untuk memulai simulasi.';
+                }
+            }
+
+            function stopCamera() {
+                scanningActive = false;
+                torchEnabled = false;
+                if (scanAnimationId) {
+                    cancelAnimationFrame(scanAnimationId);
+                    scanAnimationId = null;
+                }
+                if (mediaStream) {
+                    mediaStream.getTracks().forEach(track => track.stop());
+                    mediaStream = null;
+                }
+                videoEl.srcObject = null;
+            }
+
+            async function scanLoop() {
+                if (!scanningActive) return;
+
+                if (videoEl.readyState === videoEl.HAVE_ENOUGH_DATA) {
+                    canvasEl.width = videoEl.videoWidth;
+                    canvasEl.height = videoEl.videoHeight;
+                    canvasCtx.drawImage(videoEl, 0, 0, canvasEl.width, canvasEl.height);
+
+                    let detectedValue = null;
+
+                    // Metode 1: jsQR untuk QR Code cepat
+                    if (typeof jsQR === 'function') {
+                        const imageData = canvasCtx.getImageData(0, 0, canvasEl.width, canvasEl.height);
+                        const code = jsQR(imageData.data, imageData.width, imageData.height, {
+                            inversionAttempts: 'dontInvert'
+                        });
+                        if (code && code.data) {
+                            detectedValue = code.data.trim();
+                        }
+                    }
+
+                    // Metode 2: BarcodeDetector native untuk Barcode 1D & QR jika belum terdeteksi
+                    if (!detectedValue && barcodeDetector) {
+                        try {
+                            const barcodes = await barcodeDetector.detect(canvasEl);
+                            if (barcodes && barcodes.length > 0 && barcodes[0].rawValue) {
+                                detectedValue = barcodes[0].rawValue.trim();
+                            }
+                        } catch (e) {
+                            // Abaikan error deteksi frame tunggal
+                        }
+                    }
+
+                    if (detectedValue) {
+                        onCodeScanned(detectedValue);
+                        return;
+                    }
+                }
+
+                scanAnimationId = requestAnimationFrame(scanLoop);
+            }
+
+            function onCodeScanned(rawCode) {
+                if (!scanningActive && screenScanner.classList.contains('hidden')) return;
+
+                scannerBottomStatus.textContent = 'Kode terbaca! Membuka surat suara...';
+                stopCamera();
+
+                setTimeout(() => {
+                    showBallotScreen();
+                }, 250);
+            }
+
+            // Tombol Simulasi Scan (untuk pengujian instan atau perangkat tanpa kamera)
+            document.getElementById('btn-simulate-scan').addEventListener('click', () => {
+                onCodeScanned('PESERTA SIMULASI');
+            });
+
+            // Tombol Ganti Kamera Depan / Belakang
+            btnSwitchCamera.addEventListener('click', () => {
+                useFrontCamera = !useFrontCamera;
+                startCamera();
+            });
+
+            // Tombol Senter Kamera
+            btnToggleTorch.addEventListener('click', async () => {
+                if (!mediaStream) return;
+                const track = mediaStream.getVideoTracks()[0];
+                if (!track) return;
+                try {
+                    torchEnabled = !torchEnabled;
+                    await track.applyConstraints({ advanced: [{ torch: torchEnabled }] });
+                    btnToggleTorch.classList.toggle('bg-amber-500', torchEnabled);
+                } catch (e) {
+                    // Perangkat tidak mendukung torch
+                }
+            });
+
+            // =================================================================
+            // 2. ILUSTRASI CADANGAN JIKA GAMBAR EKSTERNAL GAGAL DIMUAT
+            // =================================================================
+            function getFallbackPortraitSVG(type) {
+                if (type === 'suit') {
+                    // Ilustrasi kandidat 01: Peci hitam, jas gelap, dasi, latar merah
+                    return `
+                        <svg viewBox="0 0 200 240" class="w-full h-full object-cover" preserveAspectRatio="xMidYMid slice">
+                            <rect width="200" height="240" fill="#DC2626" />
+                            <path d="M22 240 C26 178, 174 178, 178 240 Z" fill="#1F2937" />
+                            <polygon points="82,174 118,174 100,234" fill="#FFFFFF" />
+                            <polygon points="96,180 104,180 106,226 100,235 94,226" fill="#4B5563" />
+                            <rect x="86" y="142" width="28" height="36" rx="8" fill="#E8B48A" />
+                            <path d="M66 88 C66 58, 134 58, 134 88 L132 122 C132 144, 68 144, 68 122 Z" fill="#F1C29B" />
+                            <path d="M64 78 C64 52, 136 52, 136 78 L134 86 Q100 81 66 86 Z" fill="#111827" />
+                            <circle cx="85" cy="105" r="3" fill="#1F2937" />
+                            <circle cx="115" cy="105" r="3" fill="#1F2937" />
+                            <path d="M89 127 Q100 134 111 127" stroke="#9A3412" stroke-width="2.3" fill="none" stroke-linecap="round" />
+                        </svg>
+                    `;
+                }
+                // Ilustrasi kandidat 02: Peci hitam, baju koko putih, latar merah
+                return `
+                    <svg viewBox="0 0 200 240" class="w-full h-full object-cover" preserveAspectRatio="xMidYMid slice">
+                        <rect width="200" height="240" fill="#EF4444" />
+                        <path d="M22 240 C26 178, 174 178, 178 240 Z" fill="#FFFFFF" />
+                        <path d="M82 174 Q100 192 118 174" fill="none" stroke="#CBD5E1" stroke-width="3" />
+                        <rect x="86" y="142" width="28" height="36" rx="8" fill="#E8B48A" />
+                        <path d="M66 88 C66 58, 134 58, 134 88 L132 122 C132 144, 68 144, 68 122 Z" fill="#F1C29B" />
+                        <path d="M64 78 C64 52, 136 52, 136 78 L134 86 Q100 81 66 86 Z" fill="#111827" />
+                        <circle cx="85" cy="105" r="3" fill="#1F2937" />
+                        <circle cx="115" cy="105" r="3" fill="#1F2937" />
+                        <path d="M89 127 Q100 133 111 127" stroke="#9A3412" stroke-width="2.3" fill="none" stroke-linecap="round" />
+                    </svg>
+                `;
+            }
+
+            // =================================================================
+            // 3. TAMPILAN SURAT SUARA & PEMILIHAN KANDIDAT
+            // =================================================================
+            const candidatesContainer = document.getElementById('candidates-container');
+            const btnVoteMain = document.getElementById('btn-vote-main');
+
+            function showBallotScreen() {
+                selectedCandidateId = null;
+                renderCandidates();
+                updateMainVoteButton();
+
+                screenScanner.classList.add('hidden');
+                screenBallot.classList.remove('hidden');
+                screenBallot.classList.add('flex');
+            }
+
+            function renderCandidates() {
+                candidatesContainer.innerHTML = '';
+
+                candidates.forEach(cand => {
+                    const isSelected = selectedCandidateId === cand.id;
+                    const card = document.createElement('div');
+                    card.setAttribute('role', 'button');
+                    card.setAttribute('tabindex', '0');
+                    card.className = `candidate-card ${isSelected ? 'selected' : ''} p-3 sm:p-4 flex flex-col items-center text-center cursor-pointer focus:outline-none`;
+
+                    card.innerHTML = `
+                        <div class="relative w-full aspect-[4/4.8] rounded-xl overflow-hidden bg-[#DC2626] shadow-inner">
+                            <!-- Nomor Urut -->
+                            <span class="absolute top-2 left-2 z-10 bg-white/95 text-gray-900 font-extrabold text-xs sm:text-sm px-2.5 py-0.5 rounded-md shadow-xs">
+                                ${cand.number}
+                            </span>
+
+                            <!-- Penanda Coblos / Centang Merah Saat Dipilih -->
+                            ${isSelected ? `
+                                <span class="absolute top-2 right-2 z-10 bg-[#EF4444] text-white w-7 h-7 rounded-full flex items-center justify-center shadow-md border-2 border-white">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path>
+                                    </svg>
+                                </span>
+                            ` : ''}
+
+                            <img
+                                src="${cand.photoSrc}"
+                                alt="${cand.name}"
+                                class="w-full h-full object-cover object-top"
+                                onerror="this.style.display='none'; this.nextElementSibling.classList.remove('hidden');"
+                            />
+                            <div class="hidden w-full h-full">
+                                ${getFallbackPortraitSVG(cand.fallbackType)}
+                            </div>
+                        </div>
+
+                        <!-- Nama Kandidat -->
+                        <p class="mt-3 text-sm sm:text-base md:text-lg font-bold text-gray-900 leading-snug">
+                            ${cand.name}
+                        </p>
+                    `;
+
+                    const selectCandidate = () => {
+                        selectedCandidateId = cand.id;
+                        renderCandidates();
+                        updateMainVoteButton();
+                    };
+
+                    card.addEventListener('click', selectCandidate);
+                    card.addEventListener('keydown', (e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            selectCandidate();
+                        }
+                    });
+
+                    candidatesContainer.appendChild(card);
+                });
+            }
+
+            function updateMainVoteButton() {
+                if (selectedCandidateId !== null) {
+                    btnVoteMain.disabled = false;
+                    btnVoteMain.className = 'w-full py-3.5 sm:py-4 rounded-xl font-bold text-sm sm:text-base tracking-wider uppercase transition-all shadow-lg bg-[#2563EB] hover:bg-[#1D4ED8] active:scale-[0.99] text-white cursor-pointer';
+                } else {
+                    btnVoteMain.disabled = true;
+                    btnVoteMain.className = 'w-full py-3.5 sm:py-4 rounded-xl font-bold text-sm sm:text-base tracking-wider uppercase transition-all shadow-md bg-blue-300 text-white/90 cursor-not-allowed';
+                }
+            }
+
+            // =================================================================
+            // 4. ALUR MODAL KONFIRMASI -> PROSES -> TERIMA KASIH -> STRUK 58MM
+            // =================================================================
+            const modalConfirm = document.getElementById('modal-confirm');
+            const modalProcessing = document.getElementById('modal-processing');
+            const processingText = document.getElementById('processing-text');
+            const modalThanks = document.getElementById('modal-thanks');
+            const modalReceipt = document.getElementById('modal-receipt');
+
+            btnVoteMain.addEventListener('click', () => {
+                const chosen = candidates.find(c => c.id === selectedCandidateId);
+                if (!chosen) return;
+
+                document.getElementById('confirm-badge-num').textContent = chosen.number;
+                document.getElementById('confirm-candidate-name').textContent = chosen.name;
+
+                const confirmPhotoBox = document.getElementById('confirm-photo-box');
+                confirmPhotoBox.innerHTML = `
+                    <img
+                        src="${chosen.photoSrc}"
+                        alt="${chosen.name}"
+                        class="w-full h-full object-cover object-top"
+                        onerror="this.style.display='none'; this.nextElementSibling.classList.remove('hidden');"
+                    />
+                    <div class="hidden w-full h-full">
+                        ${getFallbackPortraitSVG(chosen.fallbackType)}
+                    </div>
+                `;
+
+                modalConfirm.classList.remove('hidden');
+                modalConfirm.classList.add('flex');
+            });
+
+            // Tombol "Ulangi" (Merah)
+            document.getElementById('btn-confirm-repeat').addEventListener('click', () => {
+                modalConfirm.classList.add('hidden');
+                modalConfirm.classList.remove('flex');
+            });
+
+            // Tombol "Pilih" (Biru) -> Alur Animasi Seperti Video
+            document.getElementById('btn-confirm-yes').addEventListener('click', () => {
+                modalConfirm.classList.add('hidden');
+                modalConfirm.classList.remove('flex');
+
+                // Tahap A: "Mohon tunggu..."
+                processingText.textContent = 'Mohon tunggu...';
+                modalProcessing.classList.remove('hidden');
+                modalProcessing.classList.add('flex');
+
+                setTimeout(() => {
+                    // Tahap B: "Menyimpan suara..." (tidak ada data pribadi pemilih yang disimpan)
+                    processingText.textContent = 'Menyimpan suara...';
+
+                    setTimeout(() => {
+                        modalProcessing.classList.add('hidden');
+                        modalProcessing.classList.remove('flex');
+
+                        // Tambah penghitung nomor antrian struk sesi sementara saja
+                        sessionTotalVotes += 1;
+
+                        // Tahap C: "Terima Kasih - Suara berhasil disimpan."
+                        modalThanks.classList.remove('hidden');
+                        modalThanks.classList.add('flex');
+
+                        setTimeout(() => {
+                            modalThanks.classList.add('hidden');
+                            modalThanks.classList.remove('flex');
+                            openReceipt58mmModal(sessionTotalVotes);
+                        }, 1050);
+                    }, 850);
+                }, 800);
+            });
+
+            // =================================================================
+            // 5. POP-UP CETAK TANDA BUKTI THERMAL 58MM
+            // =================================================================
+            function openReceipt58mmModal(queueNumber) {
+                const now = new Date();
+                const dateStr = now.toLocaleDateString('id-ID', {
+                    day: '2-digit',
+                    month: '2-digit',
+                    year: 'numeric'
+                });
+                const timeStr = now.toLocaleTimeString('id-ID', {
+                    hour: '2-digit',
+                    minute: '2-digit'
+                });
+
+                const formattedQueue = '#' + String(queueNumber).padStart(3, '0');
+                const qrPayload = `SIM-KARANGSARI-2026-${String(queueNumber).padStart(3, '0')}`;
+
+                document.getElementById('receipt-queue-num').textContent = formattedQueue;
+                document.getElementById('receipt-datetime').textContent = `${dateStr} ${timeStr} WIB`;
+                document.getElementById('receipt-qr-label').textContent = qrPayload;
+
+                const qrBox = document.getElementById('receipt-qrcode');
+                qrBox.innerHTML = '';
+                new QRCode(qrBox, {
+                    text: qrPayload,
+                    width: 74,
+                    height: 74,
+                    colorDark: '#000000',
+                    colorLight: '#ffffff',
+                    correctLevel: QRCode.CorrectLevel.M
+                });
+
+                modalReceipt.classList.remove('hidden');
+                modalReceipt.classList.add('flex');
+            }
+
+            // Cetak Struk 58mm
+            document.getElementById('btn-print-receipt').addEventListener('click', () => {
+                window.print();
+            });
+
+            // Selesai & Kembali ke Layar Pemindai QR/Barcode
+            document.getElementById('btn-finish-and-scan').addEventListener('click', () => {
+                modalReceipt.classList.add('hidden');
+                modalReceipt.classList.remove('flex');
+
+                // Reset penuh variabel pilihan (stateless per peserta)
+                selectedCandidateId = null;
+
+                screenBallot.classList.add('hidden');
+                screenBallot.classList.remove('flex');
+                screenScanner.classList.remove('hidden');
+
+                startCamera();
+            });
+
+            // Mulai aplikasi pada layar pemindai QR/Barcode
+            startCamera();
+        });
+    </script>
+</body>
+</html>
