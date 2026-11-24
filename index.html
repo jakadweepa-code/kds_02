@@ -14,31 +14,220 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Roboto+Mono:wght@400;500;700&display=swap" rel="stylesheet">
 
     <style>
+        * {
+            box-sizing: border-box;
+        }
+
         body {
             font-family: 'Inter', sans-serif;
             background-color: #F8FAFC;
             color: #111827;
             -webkit-tap-highlight-color: transparent;
+            margin: 0;
+            padding: 0;
         }
 
-        /* Kartu kandidat meniru gaya visual video referensi */
+        /* =====================================================================
+           LAYAR SURAT SUARA (#screen-ballot) - GAYA VIDEO REFERENSI (1 LAYAR PENUH)
+           ===================================================================== */
+        #screen-ballot {
+            --card-w: clamp(134px, 21vw, 178px);
+            width: 100%;
+            height: 100vh;
+            height: 100dvh;
+            min-height: 0;
+            overflow: hidden;
+            background: linear-gradient(180deg, #FEF9D7 0%, #FFFDF0 24%, #F8FAFC 48%, #F8FAFC 100%);
+        }
+
+        #screen-ballot .ballot-header {
+            flex-shrink: 0;
+            width: 100%;
+            padding-top: clamp(8px, 1.8dvh, 22px);
+            padding-bottom: clamp(4px, 1dvh, 12px);
+        }
+
+        #screen-ballot .ballot-header-inner {
+            max-width: 780px;
+            margin: 0 auto;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        #screen-ballot .ballot-logo {
+            width: clamp(34px, 6.8dvh, 56px);
+            height: clamp(36px, 7.2dvh, 60px);
+            margin-bottom: clamp(3px, 0.7dvh, 8px);
+        }
+
+        #screen-ballot .ballot-title {
+            color: #2596F4;
+            font-size: clamp(16px, 3.2dvh, 26px);
+            line-height: 1.15;
+            letter-spacing: 0.02em;
+        }
+
+        #screen-ballot .ballot-subtitle {
+            color: #1E293B;
+            font-size: clamp(9.5px, 1.85dvh, 14.5px);
+            line-height: 1.28;
+            letter-spacing: 0.015em;
+        }
+
+        #screen-ballot .ballot-main {
+            flex: 1 1 0%;
+            min-height: 0;
+            width: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: clamp(4px, 1dvh, 14px) clamp(12px, 3vw, 32px);
+            overflow: hidden;
+        }
+
+        #screen-ballot #candidates-container {
+            width: 100%;
+            max-width: 760px;
+            max-height: 100%;
+            display: flex;
+            flex-direction: row;
+            align-items: center;
+            justify-content: center;
+            gap: clamp(14px, 3.2vw, 28px);
+        }
+
+        /* Kartu kandidat ramping tegak meniru proporsi video referensi */
         .candidate-card {
             background: #FFFFFF;
             border: 3px solid #E5E7EB;
-            border-radius: 16px;
-            transition: all 0.22s cubic-bezier(0.25, 0.8, 0.25, 1);
-            box-shadow: 0 4px 16px rgba(15, 23, 42, 0.06);
+            border-radius: 14px;
+            transition: all 0.2s cubic-bezier(0.25, 0.8, 0.25, 1);
+            box-shadow: 0 4px 14px rgba(15, 23, 42, 0.07);
+            flex: 0 0 auto;
+            width: var(--card-w);
+            max-width: calc(50% - 10px);
+            max-height: 100%;
+            min-height: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: space-between;
+            padding: clamp(5px, 0.9dvh, 8px);
+            overflow: hidden;
         }
 
         .candidate-card:hover {
             transform: translateY(-2px);
-            box-shadow: 0 10px 24px rgba(15, 23, 42, 0.1);
+            box-shadow: 0 8px 20px rgba(15, 23, 42, 0.11);
         }
 
         .candidate-card.selected {
             border-color: #EF4444;
-            box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.22), 0 12px 28px rgba(239, 68, 68, 0.18);
-            transform: translateY(-3px);
+            box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.22), 0 10px 24px rgba(239, 68, 68, 0.2);
+            transform: translateY(-2px);
+        }
+
+        .candidate-photo-frame {
+            position: relative;
+            width: 100%;
+            aspect-ratio: 3 / 3.55;
+            max-height: clamp(104px, 37dvh, 215px);
+            border-radius: 10px;
+            overflow: hidden;
+            background-color: #DC2626;
+        }
+
+        .candidate-name-label {
+            flex-shrink: 0;
+            margin-top: clamp(5px, 1dvh, 10px);
+            margin-bottom: clamp(1px, 0.3dvh, 3px);
+            font-size: clamp(11px, 1.95dvh, 15px);
+            line-height: 1.2;
+            font-weight: 700;
+            color: #111827;
+            max-width: 100%;
+            overflow-wrap: anywhere;
+        }
+
+        #screen-ballot .ballot-footer {
+            flex-shrink: 0;
+            width: 100%;
+            padding-top: clamp(4px, 0.9dvh, 10px);
+            padding-bottom: clamp(10px, 2dvh, 22px);
+        }
+
+        #screen-ballot .ballot-footer-inner {
+            width: min(100% - clamp(24px, 6vw, 80px), 880px);
+            margin: 0 auto;
+        }
+
+        #screen-ballot #btn-vote-main {
+            height: clamp(38px, 6.2dvh, 50px);
+            padding: 0 16px;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: clamp(11.5px, 1.95dvh, 15px);
+            letter-spacing: 0.04em;
+        }
+
+        /* Penyesuaian khusus orientasi potrait agar muat 1 layar penuh */
+        @media (orientation: portrait) {
+            #screen-ballot {
+                --card-w: clamp(136px, 41vw, 195px);
+            }
+
+            #screen-ballot .ballot-logo {
+                width: clamp(42px, 6.2dvh, 58px);
+                height: clamp(45px, 6.6dvh, 62px);
+            }
+
+            #screen-ballot .ballot-title {
+                font-size: clamp(20px, 3dvh, 26px);
+            }
+
+            #screen-ballot .ballot-subtitle {
+                font-size: clamp(11px, 1.65dvh, 14.5px);
+            }
+
+            #screen-ballot .candidate-photo-frame {
+                aspect-ratio: 3 / 3.65;
+                max-height: 31dvh;
+            }
+        }
+
+        /* Penyesuaian khusus orientasi lanskap (meniru proporsi video referensi) */
+        @media (orientation: landscape) {
+            #screen-ballot {
+                --card-w: clamp(128px, 18.5vw, 174px);
+            }
+
+            #screen-ballot .candidate-photo-frame {
+                aspect-ratio: 3 / 3.5;
+                max-height: 38dvh;
+            }
+        }
+
+        /* Animasi efek lubang coblosan surat suara */
+        @keyframes punchHolePop {
+            0% { transform: translate(-50%, -50%) scale(0.3); opacity: 0; }
+            70% { transform: translate(-50%, -50%) scale(1.08); opacity: 1; }
+            100% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+        }
+        .punch-hole-overlay {
+            position: absolute;
+            top: 46%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 38%;
+            max-width: 58px;
+            aspect-ratio: 1 / 1;
+            z-index: 15;
+            pointer-events: none;
+            animation: punchHolePop 0.2s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+            filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.45));
         }
 
         /* Animasi garis laser pemindai */
@@ -209,6 +398,63 @@
                         id="btn-toggle-torch"
                         type="button"
                         title="Lampu Senter"
+                        class="hidden bg-black/60 hover:bg-black/80 text-white p-2.5 rounded-xl backdrop-blur-xs border border-white/20 transition-all cursor-pointer">
+                        <svg class="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
+                        </svg>
+                    </button>
+                </div>
+
+                <!-- Bilah Putih Status Bawah Sesuai Referensi -->
+                <div class="w-full bg-white/95 backdrop-blur-md rounded-2xl shadow-lg py-3 px-4 text-center border border-white">
+                    <p id="scanner-bottom-status" class="text-xs sm:text-sm font-medium text-gray-600">
+                        Siap untuk scan
+                    </p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- =====================================================================
+         TAHAP 2: LAYAR SURAT SUARA (BALLOT SCREEN) - PERSIS VIDEO REFERENSI
+         (Hanya 2 Kandidat di tengah, tanpa sapaan & tanpa tombol tidak memilih)
+         ===================================================================== -->
+    <section id="screen-ballot" class="hidden flex-col justify-between">
+        <!-- HEADER SURAT SUARA -->
+        <header class="ballot-header w-full px-4 sm:px-8">
+            <div class="ballot-header-inner relative">
+                <!-- ===========================================================
+                     LOGO KABUPATEN SUBANG
+                     Letakkan file "logo-subang.png" di folder yang sama dengan index.html.
+                     Jika file belum tersedia, ilustrasi cadangan SVG otomatis tampil.
+                     =========================================================== -->
+                <div class="ballot-logo flex items-center justify-center">
+                    <img
+                        id="header-logo-img"
+                        src="logo-subang.png"
+                        alt="Logo Kabupaten Subang"
+                        class="w-full h-full mx-auto object-contain drop-shadow-xs"
+                        onerror="this.style.display='none'; this.nextElementSibling.classList.remove('hidden');"
+                    />
+                    <svg viewBox="0 0 120 130" class="hidden w-full h-full mx-auto drop-shadow-xs" aria-label="Logo Kabupaten Subang">
+                        <!-- Perisai Utama -->
+                        <path d="M18 14 L102 14 L102 68 C102 95 60 115 60 115 C60 115 18 95 18 68 Z" fill="#15803D" stroke="#FACC15" stroke-width="4.5" />
+                        <!-- Langit Biru -->
+                        <path d="M21 17 L99 17 L99 54 L21 54 Z" fill="#0284C7" />
+                        <!-- Bintang Emas -->
+                        <polygon points="60,21 63,29 72,29 65,34 67,42 60,37 53,42 55,34 48,29 57,29" fill="#FACC15" />
+                        <!-- Gunung -->
+                        <path d="M21 54 L42 38 L54 44 L66 37 L99 54 Z" fill="#1E3A8A" />
+                        <!-- Hamparan Hijau -->
+                        <path d="M21 54 L99 54 L99 68 C99 91 60 110 60 110 C60 110 21 91 21 68 Z" fill="#16A34A" />
+                        <!-- Buah Nanas Khas Subang -->
+                        <ellipse cx="60" cy="76" rx="11" ry="15" fill="#F59E0B" stroke="#78350F" stroke-width="1.5" />
+                        <path d="M53 69 L67 83 M67 69 L53 83 M51 76 L69 76" stroke="#78350F" stroke-width="1.2" />
+                        <path d="M60 61 L53 51 L58 55 L60 48 L62 55 L67 51 Z" fill="#14532D" />
+                        <!-- Padi & Kapas -->
+                        <path d="M35 88 C28 76 28 60 36 48" stroke="#FACC15" stroke-width="3" fill="none" stroke-linecap="round" />
+                        <path d="M85 88 C92 76 92 60 84 48" stroke="#FFFFFF" stroke-width="3" fill="none" stroke-linecap="round" />
+                        <!-- Pititle="Lampu Senter"
                         class="hidden bg-black/60 hover:bg-black/80 text-white p-2.5 rounded-xl backdrop-blur-xs border border-white/20 transition-all cursor-pointer">
                         <svg class="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
