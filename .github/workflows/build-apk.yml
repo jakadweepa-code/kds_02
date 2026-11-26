@@ -42,16 +42,26 @@ jobs:
       - name: Konfigurasi izin kamera Android & WebView
         run: |
           python3 -c '
+          import xml.etree.ElementTree as ET
           from pathlib import Path
 
+          # 1. Tambah permission CAMERA secara valid di AndroidManifest.xml
           manifest = Path("android/app/src/main/AndroidManifest.xml")
-          m_text = manifest.read_text(encoding="utf-8")
-          perm = "<uses-permission android:name=\"android.permission.CAMERA\" />"
-          if perm not in m_text:
-              idx = m_text.find(">") + 1
-              m_text = m_text[:idx] + "\n    " + perm + m_text[idx:]
-              manifest.write_text(m_text, encoding="utf-8")
+          ET.register_namespace("android", "http://schemas.android.com/apk/res/android")
+          tree = ET.parse(manifest)
+          root = tree.getroot()
+          ns = {"android": "http://schemas.android.com/apk/res/android"}
+          cam_perm = "android.permission.CAMERA"
+          exists = any(
+              elem.attrib.get("{http://schemas.android.com/apk/res/android}name") == cam_perm
+              for elem in root.findall("uses-permission", ns)
+          )
+          if not exists:
+              perm_elem = ET.Element("uses-permission", {"android:name": cam_perm})
+              root.insert(0, perm_elem)
+              tree.write(manifest, encoding="utf-8", xml_declaration=True)
 
+          # 2. Izinkan runtime permission & WebView camera permission di MainActivity.java
           for act in Path("android/app/src/main").rglob("MainActivity.*"):
               code = act.read_text(encoding="utf-8")
               if act.suffix == ".java" and "onPermissionRequest" not in code:
