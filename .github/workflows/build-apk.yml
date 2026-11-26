@@ -46,6 +46,7 @@ jobs:
           import xml.etree.ElementTree as ET
           import shutil
           from pathlib import Path
+          from PIL import Image
 
           # 1. Tambah permission CAMERA di AndroidManifest.xml
           manifest = Path("android/app/src/main/AndroidManifest.xml")
