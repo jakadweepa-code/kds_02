@@ -45,7 +45,7 @@ jobs:
           import xml.etree.ElementTree as ET
           from pathlib import Path
 
-          # 1. Tambah permission CAMERA secara valid di AndroidManifest.xml
+          # 1. Tambah permission CAMERA di AndroidManifest.xml
           manifest = Path("android/app/src/main/AndroidManifest.xml")
           ET.register_namespace("android", "http://schemas.android.com/apk/res/android")
           tree = ET.parse(manifest)
@@ -61,32 +61,40 @@ jobs:
               root.insert(0, perm_elem)
               tree.write(manifest, encoding="utf-8", xml_declaration=True)
 
-          # 2. Izinkan runtime permission & WebView camera permission di MainActivity.java
-          for act in Path("android/app/src/main").rglob("MainActivity.*"):
-              code = act.read_text(encoding="utf-8")
-              if act.suffix == ".java" and "onPermissionRequest" not in code:
-                  if "import android.os.Bundle;" in code:
-                      code = code.replace(
-                          "import android.os.Bundle;",
-                          "import android.Manifest;\nimport android.content.pm.PackageManager;\nimport android.os.Bundle;\nimport android.webkit.PermissionRequest;\nimport android.webkit.WebChromeClient;\nimport androidx.core.app.ActivityCompat;\nimport androidx.core.content.ContextCompat;\nimport com.getcapacitor.BridgeActivity;",
-                          1
-                      )
-                  target = "super.onCreate(savedInstanceState);"
-                  inject = """super.onCreate(savedInstanceState);
-          if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
-              ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.CAMERA}, 1001);
-          }
-          if (this.bridge != null && this.bridge.getWebView() != null) {
-              this.bridge.getWebView().setWebChromeClient(new WebChromeClient() {
-                  @Override
-                  public void onPermissionRequest(final PermissionRequest request) {
-                      runOnUiThread(() -> request.grant(request.getResources()));
+          # 2. Tulis ulang MainActivity.java agar runtime permission & WebView getUserMedia aktif
+          main_java = Path("android/app/src/main/java/com/jakadweepa/kds02/MainActivity.java")
+          main_java.parent.mkdir(parents=True, exist_ok=True)
+          main_java.write_text("""package com.jakadweepa.kds02;
+
+          import android.Manifest;
+          import android.content.pm.PackageManager;
+          import android.os.Bundle;
+          import android.webkit.PermissionRequest;
+          import android.webkit.WebChromeClient;
+          import androidx.core.app.ActivityCompat;
+          import androidx.core.content.ContextCompat;
+          import com.getcapacitor.BridgeActivity;
+
+          public class MainActivity extends BridgeActivity {
+              @Override
+              public void onCreate(Bundle savedInstanceState) {
+                  super.onCreate(savedInstanceState);
+
+                  if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
+                      ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.CAMERA}, 1001);
                   }
-              });
-          }"""
-                  if target in code:
-                      code = code.replace(target, inject, 1)
-                      act.write_text(code, encoding="utf-8")
+
+                  if (this.bridge != null && this.bridge.getWebView() != null) {
+                      this.bridge.getWebView().setWebChromeClient(new WebChromeClient() {
+                          @Override
+                          public void onPermissionRequest(final PermissionRequest request) {
+                              runOnUiThread(() -> request.grant(request.getResources()));
+                          }
+                      });
+                  }
+              }
+          }
+          """, encoding="utf-8")
           '
 
       - name: Compile Debug APK
