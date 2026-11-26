@@ -101,27 +101,32 @@ jobs:
           icon_src = Path("icon-karisma.png")
           if icon_src.exists():
               res_dir = Path("android/app/src/main/res")
-              
-              # Ganti gambar lama di mipmap-*
-              for m_dir in res_dir.glob("mipmap-*"):
+              copied = 0
+
+              for m_dir in sorted(res_dir.glob("mipmap-*")):
                   if m_dir.is_dir() and "anydpi" not in m_dir.name:
                       for fname in ["ic_launcher.png", "ic_launcher_round.png", "ic_launcher_foreground.png"]:
-                          shutil.copy2(icon_src, m_dir / fname)
-                          
-              # Ubah setelan adaptive-icon agar langsung membaca PNG
+                          dst = m_dir / fname
+                          shutil.copy2(icon_src, dst)
+                          copied += 1
+
               anydpi_dir = res_dir / "mipmap-anydpi-v26"
               if anydpi_dir.exists():
-                  simple_icon = """<?xml version="1.0" encoding="utf-8"?>
-          <adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
-              <foreground android:drawable="@mipmap/ic_launcher_foreground" />
-              <background android:drawable="@mipmap/ic_launcher" />
-          </adaptive-icon>
-          """
+                  simple_icon = (
+                      '<?xml version="1.0" encoding="utf-8"?>\n'
+                      '<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">\n'
+                      '    <foreground android:drawable="@mipmap/ic_launcher_foreground" />\n'
+                      '    <background android:drawable="@mipmap/ic_launcher" />\n'
+                      '</adaptive-icon>\n'
+                  )
                   for xml_file in ["ic_launcher.xml", "ic_launcher_round.xml"]:
                       target_xml = anydpi_dir / xml_file
                       if target_xml.exists():
                           target_xml.write_text(simple_icon, encoding="utf-8")
-          '
+
+              print(f"Sukses menyalin {icon_src} ke {copied} file mipmap.")
+          else:
+              print("ERROR: icon-karisma.png tidak ditemukan di root repositori!")
 
       - name: Compile Debug APK
         working-directory: android
