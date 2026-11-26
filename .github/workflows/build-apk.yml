@@ -97,35 +97,23 @@ jobs:
           }
           """, encoding="utf-8")
 
-          # 3. Salin ikon icon-karisma.png ke semua folder mipmap Android
+          # 3. Paksa pakai icon-karisma.png di seluruh folder mipmap
           icon_src = Path("icon-karisma.png")
-          if icon_src.exists():
-              res_dir = Path("android/app/src/main/res")
-              copied = 0
+          res_dir = Path("android/app/src/main/res")
+          if icon_src.exists() and res_dir.exists():
+              # Hapus file xml adaptive-icon agar tidak menimpa PNG
+              for xml_file in res_dir.glob("mipmap*/ic_launcher*.xml"):
+                  xml_file.unlink(missing_ok=True)
 
+              count = 0
               for m_dir in sorted(res_dir.glob("mipmap-*")):
-                  if m_dir.is_dir() and "anydpi" not in m_dir.name:
+                  if m_dir.is_dir():
                       for fname in ["ic_launcher.png", "ic_launcher_round.png", "ic_launcher_foreground.png"]:
                           shutil.copy2(icon_src, m_dir / fname)
-                          copied += 1
-
-              anydpi_dir = res_dir / "mipmap-anydpi-v26"
-              if anydpi_dir.exists():
-                  simple_icon = (
-                      '<?xml version="1.0" encoding="utf-8"?>\n'
-                      '<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">\n'
-                      '    <foreground android:drawable="@mipmap/ic_launcher_foreground" />\n'
-                      '    <background android:drawable="@mipmap/ic_launcher" />\n'
-                      '</adaptive-icon>\n'
-                  )
-                  for xml_file in ["ic_launcher.xml", "ic_launcher_round.xml"]:
-                      target_xml = anydpi_dir / xml_file
-                      if target_xml.exists():
-                          target_xml.write_text(simple_icon, encoding="utf-8")
-
-              print(f"Sukses menyalin {icon_src} ke {copied} file mipmap.")
+                          count += 1
+              print(f"BERHASIL: {count} file ikon diperbarui dari {icon_src}")
           else:
-              print("ERROR: icon-karisma.png tidak ditemukan di root repositori!")
+              print("GAGAL: icon-karisma.png atau folder res tidak ditemukan")
           PYEOF
 
       - name: Compile Debug APK
