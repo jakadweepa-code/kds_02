@@ -39,6 +39,46 @@ jobs:
           npx cap add android
           npx cap sync android
 
+      - name: Konfigurasi izin kamera Android & WebView
+        run: |
+          python3 -c '
+          from pathlib import Path
+
+          manifest = Path("android/app/src/main/AndroidManifest.xml")
+          m_text = manifest.read_text(encoding="utf-8")
+          perm = "<uses-permission android:name=\"android.permission.CAMERA\" />"
+          if perm not in m_text:
+              idx = m_text.find(">") + 1
+              m_text = m_text[:idx] + "\n    " + perm + m_text[idx:]
+              manifest.write_text(m_text, encoding="utf-8")
+
+          for act in Path("android/app/src/main").rglob("MainActivity.*"):
+              code = act.read_text(encoding="utf-8")
+              if act.suffix == ".java" and "onPermissionRequest" not in code:
+                  if "import android.os.Bundle;" in code:
+                      code = code.replace(
+                          "import android.os.Bundle;",
+                          "import android.Manifest;\nimport android.content.pm.PackageManager;\nimport android.os.Bundle;\nimport android.webkit.PermissionRequest;\nimport android.webkit.WebChromeClient;\nimport androidx.core.app.ActivityCompat;\nimport androidx.core.content.ContextCompat;\nimport com.getcapacitor.BridgeActivity;",
+                          1
+                      )
+                  target = "super.onCreate(savedInstanceState);"
+                  inject = """super.onCreate(savedInstanceState);
+          if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
+              ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.CAMERA}, 1001);
+          }
+          if (this.bridge != null && this.bridge.getWebView() != null) {
+              this.bridge.getWebView().setWebChromeClient(new WebChromeClient() {
+                  @Override
+                  public void onPermissionRequest(final PermissionRequest request) {
+                      runOnUiThread(() -> request.grant(request.getResources()));
+                  }
+              });
+          }"""
+                  if target in code:
+                      code = code.replace(target, inject, 1)
+                      act.write_text(code, encoding="utf-8")
+          '
+
       - name: Compile Debug APK
         working-directory: android
         run: chmod +x gradlew && ./gradlew assembleDebug
