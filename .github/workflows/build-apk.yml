@@ -41,6 +41,7 @@ jobs:
 
       - name: Konfigurasi izin kamera Android, WebView, & Ikon Aplikasi
         run: |
+          python3 -m pip install --break-system-packages Pillow
           python3 - << 'PYEOF'
           import xml.etree.ElementTree as ET
           import shutil
@@ -97,23 +98,33 @@ jobs:
           }
           """, encoding="utf-8")
 
-          # 3. Paksa pakai icon-karisma.png di seluruh folder mipmap
+          # 3. Generate ikon tajam ke semua folder mipmap Android
           icon_src = Path("icon-karisma.png")
           res_dir = Path("android/app/src/main/res")
+          sizes = {
+              "mipmap-mdpi": 48,
+              "mipmap-hdpi": 72,
+              "mipmap-xhdpi": 96,
+              "mipmap-xxhdpi": 144,
+              "mipmap-xxxhdpi": 192,
+          }
+
           if icon_src.exists() and res_dir.exists():
-              # Hapus file xml adaptive-icon agar tidak menimpa PNG
               for xml_file in res_dir.glob("mipmap*/ic_launcher*.xml"):
                   xml_file.unlink(missing_ok=True)
 
+              base_img = Image.open(icon_src).convert("RGBA")
               count = 0
-              for m_dir in sorted(res_dir.glob("mipmap-*")):
-                  if m_dir.is_dir():
+              for folder, px in sizes.items():
+                  target_dir = res_dir / folder
+                  if target_dir.exists():
+                      resized = base_img.resize((px, px), Image.Resampling.LANCZOS)
                       for fname in ["ic_launcher.png", "ic_launcher_round.png", "ic_launcher_foreground.png"]:
-                          shutil.copy2(icon_src, m_dir / fname)
+                          resized.save(target_dir / fname, format="PNG")
                           count += 1
-              print(f"BERHASIL: {count} file ikon diperbarui dari {icon_src}")
+              print(f"BERHASIL: {count} ikon tajam dibuat dari {icon_src} (1024x1024)")
           else:
-              print("GAGAL: icon-karisma.png atau folder res tidak ditemukan")
+              print("PERINGATAN: icon-karisma.png atau folder res tidak ditemukan.")
           PYEOF
 
       - name: Compile Debug APK
