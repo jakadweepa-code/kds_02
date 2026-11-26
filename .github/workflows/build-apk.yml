@@ -41,7 +41,7 @@ jobs:
 
       - name: Konfigurasi izin kamera Android, WebView, & Ikon Aplikasi
         run: |
-          python3 -c '
+          python3 - << 'PYEOF'
           import xml.etree.ElementTree as ET
           import shutil
           from pathlib import Path
@@ -106,8 +106,7 @@ jobs:
               for m_dir in sorted(res_dir.glob("mipmap-*")):
                   if m_dir.is_dir() and "anydpi" not in m_dir.name:
                       for fname in ["ic_launcher.png", "ic_launcher_round.png", "ic_launcher_foreground.png"]:
-                          dst = m_dir / fname
-                          shutil.copy2(icon_src, dst)
+                          shutil.copy2(icon_src, m_dir / fname)
                           copied += 1
 
               anydpi_dir = res_dir / "mipmap-anydpi-v26"
@@ -127,6 +126,7 @@ jobs:
               print(f"Sukses menyalin {icon_src} ke {copied} file mipmap.")
           else:
               print("ERROR: icon-karisma.png tidak ditemukan di root repositori!")
+          PYEOF
 
       - name: Compile Debug APK
         working-directory: android
